@@ -217,7 +217,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# Generated synthetic plots
+/data/synthetic/images/
 
 *:Zone.Identifier
-
-images/

@@ -61,7 +61,7 @@ end
 
 nGen = 5;
 
-for g = 1:nGen
+for g = 1:nGen + 2
 
     %% Smooth random fields
     etaA = smoothdata(randn(size(s)), 'gaussian', noise_window);
@@ -78,32 +78,67 @@ for g = 1:nGen
     %% ======================================
     %% FIXED CAMERA FROM FINAL TIME STEP
     %% ======================================
-
     Lt_final = L(t_samples(end));
+    if g  <= nGen
 
-    ell = s * Lt_final + 0.02 * Lt_final * sin(2*pi*s);
+        ell = s * Lt_final + 0.02 * Lt_final * sin(2*pi*s);
 
-    kappa_alpha = (bend_strength / Lt_final) * f_alpha;
-    kappa_phi   = (twist_strength / Lt_final) * f_phi;
+        kappa_alpha = (bend_strength / Lt_final) * f_alpha;
+        kappa_phi   = (twist_strength / Lt_final) * f_phi;
 
-    alpha = alpha0 + cumtrapz(ell, kappa_alpha);
-    phi   = phi0   + cumtrapz(ell, kappa_phi);
+        alpha = alpha0 + cumtrapz(ell, kappa_alpha);
+        phi   = phi0   + cumtrapz(ell, kappa_phi);
 
-    alpha = min(max(alpha, -alpha_clip), alpha_clip);
+        alpha = min(max(alpha, -alpha_clip), alpha_clip);
 
-    Tx = sin(alpha).*cos(phi);
-    Ty = sin(alpha).*sin(phi);
-    Tz = cos(alpha);
+        Tx = sin(alpha).*cos(phi);
+        Ty = sin(alpha).*sin(phi);
+        Tz = cos(alpha);
 
-    x_final = cumtrapz(ell, Tx);
-    y_final = cumtrapz(ell, Ty);
-    z_final = cumtrapz(ell, Tz);
+        x_final = cumtrapz(ell, Tx);
+        y_final = cumtrapz(ell, Ty);
+        z_final = cumtrapz(ell, Tz);
 
-    % enforce upward growth
-    z_final = z_final - min(z_final);
-    if z_final(end) < z_final(1)
-        z_final = max(z_final) - z_final;
+        % enforce upward growth
+        z_final = z_final - min(z_final);
+        if z_final(end) < z_final(1)
+            z_final = max(z_final) - z_final;
+        end
+    elseif g == nGen + 1
+        % helix (for testing)
+        ell = s * Lt;
+
+        R = 0.4;             % helix radius
+        n_turns = 2.5;       % controls complexity
+
+        % helix
+        x = R * cos(2*pi*n_turns*s);
+        y = R * sin(2*pi*n_turns*s);
+        z = Lt * s;
+
+        % optional: slight vertical modulation (more realistic)
+        z = z + 0.1 * R * sin(2*pi*n_turns*s);
+    else
+        % loop de loop (for testing) 
+        ell = s * Lt;
+
+        % loop radius
+        R = 0.5;            
+        center_z = Lt * 0.5;
+
+        theta = 2*pi*s;
+
+        % loop in x-z plane
+        x = R * sin(theta);
+        z = center_z + R * cos(theta);
+
+        % add global upward shift so it's not symmetric around 0
+        z = z - min(z);     % ensure starts at 0
+
+        % y is monotone
+        y = 0.3 * Lt * s;
     end
+    
 
     % thickness (worst-case envelope)
     radius_final = 0.02 * (1 + 0.2 * smoothdata(randn(size(s)),'gaussian',10));
@@ -174,32 +209,69 @@ for g = 1:nGen
     %% ===============================
 
     for i = 1:length(t_samples)
+        if g <= nGen
+            Lt = L(t_samples(i));
 
-        Lt = L(t_samples(i));
+            ell = s * Lt + 0.02 * Lt * sin(2*pi*s);
 
-        ell = s * Lt + 0.02 * Lt * sin(2*pi*s);
+            kappa_alpha = (bend_strength / Lt) * f_alpha;
+            kappa_phi   = (twist_strength / Lt) * f_phi;
 
-        kappa_alpha = (bend_strength / Lt) * f_alpha;
-        kappa_phi   = (twist_strength / Lt) * f_phi;
+            alpha = alpha0 + cumtrapz(ell, kappa_alpha);
+            phi   = phi0   + cumtrapz(ell, kappa_phi);
 
-        alpha = alpha0 + cumtrapz(ell, kappa_alpha);
-        phi   = phi0   + cumtrapz(ell, kappa_phi);
+            alpha = min(max(alpha, -alpha_clip), alpha_clip);
 
-        alpha = min(max(alpha, -alpha_clip), alpha_clip);
+            Tx = sin(alpha).*cos(phi);
+            Ty = sin(alpha).*sin(phi);
+            Tz = cos(alpha);
 
-        Tx = sin(alpha).*cos(phi);
-        Ty = sin(alpha).*sin(phi);
-        Tz = cos(alpha);
+            x = cumtrapz(ell, Tx);
+            y = cumtrapz(ell, Ty);
+            z = cumtrapz(ell, Tz);
 
-        x = cumtrapz(ell, Tx);
-        y = cumtrapz(ell, Ty);
-        z = cumtrapz(ell, Tz);
+            % enforce bottom → top growth
+            z = z - min(z);
+            if z(end) < z(1)
+                z = max(z) - z;
+            end
+        elseif g == nGen + 1
+            % helix (for testing)
+            Lt = L(t_samples(i));
+            ell = s * Lt;
 
-        % enforce bottom → top growth
-        z = z - min(z);
-        if z(end) < z(1)
-            z = max(z) - z;
-        end
+            R = 0.4;             % helix radius
+            n_turns = 2.5;       % controls complexity
+
+            % helix
+            x = R * cos(2*pi*n_turns*s);
+            y = R * sin(2*pi*n_turns*s);
+            z = Lt * s;
+
+            % optional: slight vertical modulation (more realistic)
+            z = z + 0.1 * R * sin(2*pi*n_turns*s);
+        else
+            % loop de loop (for testing) 
+            Lt = L(t_samples(i));
+            ell = s * Lt;
+
+            % loop radius
+            R = 0.5;            
+            center_z = Lt * 0.5;
+
+            theta = 2*pi*s;
+
+            % loop in x-z plane
+            x = R * sin(theta);
+            z = center_z + R * cos(theta);
+
+            % add global upward shift so it's not symmetric around 0
+            z = z - min(z);     % ensure starts at 0
+
+            % y is monotone
+            y = 0.3 * Lt * s;
+        end 
+        
 
         %% thickness
         radius_cm = 0.02 * (1 + 0.2 * smoothdata(randn(size(s)),'gaussian',10));

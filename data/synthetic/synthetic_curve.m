@@ -147,6 +147,29 @@ for g = 1:nGen
     end
 
     %% ===============================
+    %% SAVE CAMERA PARAMETERS
+    %% ===============================
+
+    genDir = fullfile(outputDir, sprintf('gen_%02d', g));
+    if ~exist(genDir, 'dir')
+        mkdir(genDir);
+    end
+
+    camera_file = fullfile(genDir, 'camera_params.csv');
+
+    % column names
+    headers = {'scale','x_offset','z_offset','imgH','imgW'};
+    % values (1 row)
+    values = [scale, x_offset, z_offset, imgH, imgW];
+    % write CSV
+    fid = fopen(camera_file, 'w');
+    % header row
+    fprintf(fid, '%s,%s,%s,%s,%s\n', headers{:});
+    % data row
+    fprintf(fid, '%.10f,%.10f,%.10f,%d,%d\n', values);
+    fclose(fid);
+
+    %% ===============================
     %% TIME LOOP
     %% ===============================
 

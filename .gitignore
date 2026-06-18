@@ -219,5 +219,6 @@ __marimo__/
 
 # Generated synthetic plots
 /data/synthetic/images/
+*.gif
 
 *:Zone.Identifier

@@ -80,7 +80,6 @@ for g = 1:nGen + 2
     %% ======================================
     Lt_final = L(t_samples(end));
     if g  <= nGen
-
         ell = s * Lt_final + 0.02 * Lt_final * sin(2*pi*s);
 
         kappa_alpha = (bend_strength / Lt_final) * f_alpha;
@@ -119,24 +118,41 @@ for g = 1:nGen + 2
         % optional: slight vertical modulation (more realistic)
         z = z + 0.1 * R * sin(2*pi*n_turns*s);
     else
-        % loop de loop (for testing) 
-        ell = s * Lt;
+        % loop de loop (for testing)
+        ell = s * Lt + 0.02 * Lt * sin(2*pi*s);   % keep your original variation
 
-        % loop radius
-        R = 0.5;            
-        center_z = Lt * 0.5;
+        center = 0.4;
+        width  = 0.2;
 
-        theta = 2*pi*s;
+        bump = exp(-((s - center).^2)/width^2);
 
-        % loop in x-z plane
-        x = R * sin(theta);
-        z = center_z + R * cos(theta);
+        % --- LOOP CONTROL ---
+        % full rotation localized in s
+        alpha_loop = 2*pi * bump;
 
-        % add global upward shift so it's not symmetric around 0
-        z = z - min(z);     % ensure starts at 0
+        % add upward bias so curve keeps going up
+        alpha_bias = 0.3;     % small tilt upward
 
-        % y is monotone
-        y = 0.3 * Lt * s;
+        alpha = alpha_loop + alpha_bias;
+
+        % --- Y-direction motion
+        phi = 0.2 * bump;
+
+        % --- compute tangent ---
+        Tx = sin(alpha).*cos(phi);
+        Ty = sin(alpha).*sin(phi) +  0.3;
+        Tz = cos(alpha);
+
+        % integrate
+        x = cumtrapz(ell, Tx);
+        y = cumtrapz(ell, Ty);
+        z = cumtrapz(ell, Tz);
+
+        % normalize z
+        z = z - min(z);
+        if z(end) < z(1)
+            z = max(z) - z;
+        end
     end
     
 
@@ -253,23 +269,40 @@ for g = 1:nGen + 2
         else
             % loop de loop (for testing) 
             Lt = L(t_samples(i));
-            ell = s * Lt;
+            ell = s * Lt + 0.02 * Lt * sin(2*pi*s);   % keep your original variation
 
-            % loop radius
-            R = 0.5;            
-            center_z = Lt * 0.5;
+            center = 0.4;
+            width  = 0.2;
 
-            theta = 2*pi*s;
+            bump = exp(-((s - center).^2)/width^2);
 
-            % loop in x-z plane
-            x = R * sin(theta);
-            z = center_z + R * cos(theta);
+            % --- LOOP CONTROL ---
+            % full rotation localized in s
+            alpha_loop = 2*pi * bump;
 
-            % add global upward shift so it's not symmetric around 0
-            z = z - min(z);     % ensure starts at 0
+            % add upward bias so curve keeps going up
+            alpha_bias = 0.3;     % small tilt upward
 
-            % y is monotone
-            y = 0.3 * Lt * s;
+            alpha = alpha_loop + alpha_bias;
+
+            % --- Y-direction motion (small!!)
+            phi = 0.2 * bump;
+
+            % --- compute tangent ---
+            Tx = sin(alpha).*cos(phi);
+            Ty = sin(alpha).*sin(phi) + 0.3; 
+            Tz = cos(alpha);
+
+            % integrate
+            x = cumtrapz(ell, Tx);
+            y = cumtrapz(ell, Ty);
+            z = cumtrapz(ell, Tz);
+
+            % normalize z
+            z = z - min(z);
+            if z(end) < z(1)
+                z = max(z) - z;
+            end
         end 
         
 

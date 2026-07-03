@@ -398,13 +398,13 @@ function mask = render_mask_fixed(xp_raw, zp_raw, radius_cm, scale, x_offset, z_
     end
 
     % smoothing
-    mask = imgaussfilt(double(mask), 1.2);
-    mask = mask > 0.35;
+    % mask = imgaussfilt(double(mask), 1.2);
+    % mask = mask > 0.35;
 
     % speckle noise
-    noise = rand(imgH, imgW) < 0.002;
-    mask = mask | noise;
+    % noise = rand(imgH, imgW) < 0.002;
+    % mask = mask | noise;
 
     % clean
-    mask = bwareaopen(mask, 30);
+    % mask = bwareaopen(mask, 30);
 end

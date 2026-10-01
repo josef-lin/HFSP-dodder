@@ -219,6 +219,7 @@ __marimo__/
 
 # Generated synthetic plots
 /data/synthetic/images/
+/data/synthetic/test_curves/
 
 *:Zone.Identifier
 

@@ -2,6 +2,9 @@ function test_curve()
 
 clear; clc;
 
+imgW = 512;
+imgH = 512;
+
 %% ==========================================
 %% OUTPUT DIRECTORY
 %% ==========================================
@@ -11,28 +14,6 @@ outputDir = 'test_curves';
 if ~exist(outputDir,'dir')
     mkdir(outputDir);
 end
-
-%% ==========================================
-%% CAMERA PARAMETERS
-%% ==========================================
-
-scale    = 51.9909824589;
-x_offset = 256.0;
-z_offset = 21.0982867323;
-
-imgH = 512;
-imgW = 512;
-
-cameraTable = table( ...
-    scale, ...
-    x_offset, ...
-    z_offset, ...
-    imgH, ...
-    imgW);
-
-writetable( ...
-    cameraTable, ...
-    fullfile(outputDir,'camera_params.csv'));
 
 %% ==========================================
 %% STORAGE TABLES
@@ -53,33 +34,24 @@ x = t .* cos(2*pi*t.^2);
 y = t .* sin(2*pi*t.^2);
 z = 4*t;
 
-save_curve();
+camera = auto_camera(x, y, z, imgW, imgH);
+save_curve(camera);
 
 
 %% ==========================================
-%% CURVE 2 : VIVIANI SEGMENT
+%% CURVE 2 : S-Bend
 %% ==========================================
 
 curve_id = 2;
 
-t = linspace(0,2*pi,200)';
+t = linspace(0,0.75,300)';
 
-x = 1 + cos(t);
-y = sin(t);
-z = 2*sin(t/2);
+x = 2*sin(pi*t);
+y = 4*t;
+z = sin(2*pi*t);
 
-% scale to similar size as plant examples
-coords = [x y z];
-
-coords = coords - mean(coords,1);
-coords = coords ./ max(abs(coords(:)));
-coords = coords * 2.0;
-
-x = coords(:,1);
-y = coords(:,2);
-z = coords(:,3) + 2.0;
-
-save_curve();
+camera = auto_camera(x, y, z, imgW, imgH);
+save_curve(camera);
 
 
 %% ==========================================
@@ -104,17 +76,8 @@ x = B0*P0(1) + B1*P1(1) + B2*P2(1) + B3*P3(1);
 y = B0*P0(2) + B1*P1(2) + B2*P2(2) + B3*P3(2);
 z = B0*P0(3) + B1*P1(3) + B2*P2(3) + B3*P3(3);
 
-coords = [x y z];
-
-coords = coords - mean(coords,1);
-coords = coords ./ max(abs(coords(:)));
-coords = coords * 2.0;
-
-x = coords(:,1);
-y = coords(:,2);
-z = coords(:,3) + 2.0;
-
-save_curve();
+camera = auto_camera(x, y, z, imgW, imgH);
+save_curve(camera);
 
 
 %% ==========================================
@@ -137,7 +100,7 @@ disp('Done.');
 %% NESTED FUNCTION : SAVE CURVE
 %% ============================================================
 
-    function save_curve()
+    function save_curve(camera)
 
         n = length(x);
 
@@ -199,12 +162,12 @@ disp('Done.');
 
         mask_xz = render_mask_fixed( ...
             x, z, radius_cm, ...
-            scale, x_offset, z_offset, ...
+            camera.scale, camera.x_offset, camera.z_offset, ...
             imgH, imgW);
 
         mask_yz = render_mask_fixed( ...
             y, z, radius_cm, ...
-            scale, x_offset, z_offset, ...
+            camera.scale, camera.x_offset, camera.z_offset, ...
             imgH, imgW);
 
         %% ------------------------------------------
@@ -235,6 +198,22 @@ disp('Done.');
 
         fprintf('Saved %s\n',fname_xz);
         fprintf('Saved %s\n',fname_yz);
+
+        cameraTable = table( ...
+            curve_id,...
+            camera.scale,...
+            camera.x_offset,...
+            camera.z_offset,...
+            imgH,...
+            imgW,...
+            'VariableNames',...
+            {'gen','scale','x_offset','z_offset','imgH','imgW'});
+
+        writetable( ...
+            cameraTable, ...
+            fullfile(genDir,'camera_params.csv'));
+
+        fprintf('Saved camera_params.csv\n');
 
     end
 
@@ -303,5 +282,37 @@ function mask = render_mask_fixed( ...
     mask = imclose(mask, strel('disk',2));
 
     mask = bwareaopen(mask,5);
+
+end
+
+function camera = auto_camera(x,y,z,imgW,imgH)
+
+    margin = 0.85;
+
+    horizontal_extent = max( ...
+        max(x)-min(x), ...
+        max(y)-min(y));
+
+    vertical_extent = max(z)-min(z);
+
+    camera.scale = margin * min( ...
+        imgW / horizontal_extent, ...
+        imgH / vertical_extent);
+
+    % centre both x and y around image centre
+    xy_centre = 0.5 * ...
+        (max([x;y]) + min([x;y]));
+
+    z_centre = 0.5 * ...
+        (max(z) + min(z));
+
+    camera.x_offset = ...
+        imgW/2 - camera.scale*xy_centre;
+
+    camera.z_offset = ...
+        imgH/2 - camera.scale*z_centre;
+
+    camera.imgW = imgW;
+    camera.imgH = imgH;
 
 end

@@ -84,17 +84,8 @@ save_curve(camera);
 %% SAVE AGGREGATED CSV FILES
 %% ==========================================
 
-writetable( ...
-    viewCurveData, ...
-    fullfile(outputDir,'view_curves.csv'));
-
-writetable( ...
-    trueCurveData, ...
-    fullfile(outputDir,'true_curve.csv'));
-
-fprintf('Saved view_curves.csv\n');
-fprintf('Saved true_curve.csv\n');
-disp('Done.');
+writetable(viewCurveData, fullfile(outputDir,'view_curves.csv'));
+writetable(trueCurveData, fullfile(outputDir,'true_curve.csv'));
 
 %% ============================================================
 %% NESTED FUNCTION : SAVE CURVE
@@ -142,7 +133,17 @@ disp('Done.');
             'VariableNames', ...
             {'gen','time','view','point','coord1','coord2'});
 
-        viewCurveData = [viewCurveData; Txz; Tyz];
+        Txy = table( ...
+            repmat(curve_id,n,1), ...
+            ones(n,1), ...
+            repmat("xy",n,1), ...
+            (1:n)', ...
+            x, ...
+            y, ...
+            'VariableNames', ...
+            {'gen','time','view','point','coord1','coord2'});
+
+        viewCurveData = [viewCurveData; Txz; Tyz; Txy];
 
         %% ------------------------------------------
         %% THICKNESS
@@ -150,10 +151,7 @@ disp('Done.');
 
         s = linspace(0,1,n)';
 
-        radius_cm = ...
-            0.02 * ...
-            (1 + 0.2 * smoothdata(randn(size(s)),'gaussian',10));
-
+        radius_cm = 0.02 * (1 + 0.2 * smoothdata(randn(size(s)),'gaussian',10));
         radius_cm = max(radius_cm,0.02);
 
         %% ------------------------------------------
@@ -167,54 +165,40 @@ disp('Done.');
 
         mask_yz = render_mask_fixed( ...
             y, z, radius_cm, ...
-            camera.scale, camera.x_offset, camera.z_offset, ...
+            camera.scale, camera.y_offset, camera.z_offset, ...
+            imgH, imgW);
+
+        mask_xy = render_mask_fixed( ...
+            x, y, radius_cm, ...
+            camera.scale, camera.x_offset, camera.y_offset, ...
             imgH, imgW);
 
         %% ------------------------------------------
         %% SAVE PNGS
         %% ------------------------------------------
 
-        genDir = fullfile( ...
-            outputDir, ...
-            sprintf('gen_%02d',curve_id));
+        genDir = fullfile(outputDir, sprintf('gen_%02d',curve_id));
 
         if ~exist(genDir,'dir')
             mkdir(genDir);
         end
 
-        fname_xz = sprintf( ...
-            'plant_gen%02d_t01_xz.png', ...
-            curve_id);
+        fname_xz = sprintf('plant_gen%02d_t01_xz.png', curve_id);
+        fname_yz = sprintf('plant_gen%02d_t01_yz.png', curve_id);
+        fname_xy = sprintf('plant_gen%02d_t01_xy.png', curve_id);
 
-        fname_yz = sprintf( ...
-            'plant_gen%02d_t01_yz.png', ...
-            curve_id);
-
-        imwrite(mask_xz, ...
-            fullfile(genDir,fname_xz));
-
-        imwrite(mask_yz, ...
-            fullfile(genDir,fname_yz));
-
-        fprintf('Saved %s\n',fname_xz);
-        fprintf('Saved %s\n',fname_yz);
+        imwrite(mask_xz, fullfile(genDir,fname_xz));
+        imwrite(mask_yz, fullfile(genDir,fname_yz));
+        imwrite(mask_xy, fullfile(genDir,fname_xy));
 
         cameraTable = table( ...
             curve_id,...
             camera.scale,...
-            camera.x_offset,...
-            camera.z_offset,...
-            imgH,...
-            imgW,...
-            'VariableNames',...
-            {'gen','scale','x_offset','z_offset','imgH','imgW'});
+            camera.x_offset, camera.y_offset, camera.z_offset,...
+            imgH,imgW,...
+            'VariableNames', {'gen','scale','x_offset','y_offset','z_offset','imgH','imgW'});
 
-        writetable( ...
-            cameraTable, ...
-            fullfile(genDir,'camera_params.csv'));
-
-        fprintf('Saved camera_params.csv\n');
-
+        writetable(cameraTable, fullfile(genDir,'camera_params.csv'));
     end
 
 end
@@ -224,93 +208,64 @@ end
 %% ============================================================
 
 function mask = render_mask_fixed( ...
-    xp_raw, ...
-    zp_raw, ...
+    x1_raw, x2_raw, ...
     radius_cm, ...
     scale, ...
-    x_offset, ...
-    z_offset, ...
-    imgH, ...
-    imgW)
+    x_offset, z_offset, ...
+    imgH, imgW)
 
-    xp = xp_raw * scale + x_offset;
-
-    zp = imgH - ...
-         (zp_raw * scale + z_offset);
-
-    fprintf("xp range = [%f, %f]\n", min(xp), max(xp));
-    fprintf("zp range = [%f, %f]\n", min(zp), max(zp));
+    x1= x1_raw * scale + x_offset;
+    x2 = imgH - (x2_raw * scale + z_offset);
 
     radius_px = radius_cm * scale;
 
-    [X,Z] = meshgrid(1:imgW,1:imgH);
+    [X1,X2] = meshgrid(1:imgW,1:imgH);
 
     mask = false(imgH,imgW);
 
-    N = length(xp);
+    N = length(x1);
 
     for k = 1:(N-1)
-
-        segLength = hypot( ...
-            xp(k+1)-xp(k), ...
-            zp(k+1)-zp(k));
+        segLength = hypot(x1(k+1)-x1(k), x2(k+1)-x2(k));
 
         nInterp = max(2,ceil(segLength));
-
         s = linspace(0,1,nInterp);
+        xs = x1(k) + s*(x1(k+1)-x1(k));
+        zs = x2(k) + s*(x2(k+1)-x2(k));
 
-        xs = xp(k) + s*(xp(k+1)-xp(k));
-        zs = zp(k) + s*(zp(k+1)-zp(k));
-
-        rs = radius_px(k) + ...
-            s*(radius_px(k+1)-radius_px(k));
+        rs = radius_px(k) + s*(radius_px(k+1)-radius_px(k));
 
         for j = 1:nInterp
+            dx1 = X1 - xs(j);
+            dx2 = X2 - zs(j);
 
-            dx = X - xs(j);
-            dz = Z - zs(j);
-
-            mask = mask | ...
-                (dx.^2 + dz.^2 <= rs(j)^2);
-
+            mask = mask | (dx1.^2 + dx2.^2 <= rs(j)^2);
         end
     end
 
     mask = imgaussfilt(double(mask),0.6);
     mask = mask > 0.10;
-
     mask = imclose(mask, strel('disk',2));
-
     mask = bwareaopen(mask,5);
-
 end
 
 function camera = auto_camera(x,y,z,imgW,imgH)
 
     margin = 0.85;
 
-    horizontal_extent = max( ...
-        max(x)-min(x), ...
-        max(y)-min(y));
-
+    horizontal_extent = max(max(x)-min(x), max(y)-min(y));
     vertical_extent = max(z)-min(z);
 
-    camera.scale = margin * min( ...
-        imgW / horizontal_extent, ...
-        imgH / vertical_extent);
+    camera.scale = margin * min(imgW / horizontal_extent, imgH / vertical_extent);
 
     % centre both x and y around image centre
-    xy_centre = 0.5 * ...
-        (max([x;y]) + min([x;y]));
+    x_center = 0.5 * (max(x) + min(x));
+    y_center = 0.5 * (max(y) + min(y));
+    z_center = 0.5 * (max(z) + min(z));
 
-    z_centre = 0.5 * ...
-        (max(z) + min(z));
-
-    camera.x_offset = ...
-        imgW/2 - camera.scale*xy_centre;
-
-    camera.z_offset = ...
-        imgH/2 - camera.scale*z_centre;
+    camera.x_offset = imgW/2 - camera.scale*x_center;
+    camera.y_offset = imgH/2 - camera.scale*y_center;
+    camera.z_offset = imgH/2 - camera.scale*z_center;
 
     camera.imgW = imgW;
     camera.imgH = imgH;

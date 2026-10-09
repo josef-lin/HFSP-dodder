@@ -56,7 +56,7 @@ w = w / max(w);
 %% OUTPUT DIRECTORY
 %% ===============================
 
-outputDir = 'images';
+outputDir = 'synthetic_curves';
 
 if ~exist(outputDir, 'dir')
     mkdir(outputDir);
@@ -117,41 +117,25 @@ for g = 1:nGen
     radius_final = max(radius_final, 0.02);
 
     %% --- include BOTH projections in bounding box
-    xmin = min([x_final - radius_final, y_final - radius_final], [], 'all');
-    xmax = max([x_final + radius_final, y_final + radius_final], [], 'all');
+    horizontal_extent = max( ...
+        max(x_final)-min(x_final), ...
+        max(y_final)-min(y_final));
 
-    zmin = min(z_final - radius_final);
-    zmax = max(z_final + radius_final);
+    vertical_extent = max(z_final)-min(z_final);
 
-    width_cm  = xmax - xmin;
-    height_cm = zmax - zmin;
+    margin = 0.85;
 
-    % LARGE margin to prevent clipping
-    margin = 0.5;
+    scale = margin * min( ...
+        imgW/horizontal_extent, ...
+        imgH/vertical_extent);
 
-    width_cm  = width_cm  * (1 + margin);
-    height_cm = height_cm * (1 + margin);
+    x_center = 0.5*(max(x_final)+min(x_final));
+    y_center = 0.5*(max(y_final)+min(y_final));
+    z_center = 0.5*(max(z_final)+min(z_final));
 
-    sx = imgW / width_cm;
-    sz = imgH / height_cm;
-
-    scale = min(sx, sz);
-
-    % enforce x=0 center
-    x_offset = imgW / 2;
-
-    % bottom alignment
-    margin_px = 20;   % small buffer in pixels
-
-    z_offset = margin_px - zmin * scale;
-
-    % ensure top fits
-    top_pixel = zmax * scale + z_offset;
-
-    if top_pixel > imgH - margin_px
-        scale = (imgH - 2*margin_px) / (zmax - zmin);
-        z_offset = margin_px - zmin * scale;
-    end
+    x_offset = imgW/2 - scale*x_center;
+    y_offset = imgH/2 - scale*y_center;
+    z_offset = imgH/2 - scale*z_center;
 
     %% ===============================
     %% TIME LOOP
@@ -231,29 +215,60 @@ for g = 1:nGen
             'VariableNames', ...
             {'gen','time','view','point','coord1','coord2'});
 
-        viewCurveData = [viewCurveData; xzBlock; yzBlock];
+        %% ==========================================
+        %% XY VIEW
+        %% ==========================================
+        xyBlock = table( ...
+            repmat(g,nPts,1), ...
+            repmat(t_samples(i),nPts,1), ...
+            repmat("xy",nPts,1), ...
+            (1:nPts)', ...
+            x(:), ...
+            y(:), ...
+            'VariableNames', ...
+            {'gen','time','view','point','coord1','coord2'});
+
+        viewCurveData = [viewCurveData; xzBlock; yzBlock; xyBlock];
 
         %% thickness
         radius_cm = 0.02 * (1 + 0.2 * smoothdata(randn(size(s)),'gaussian',10));
         radius_cm = max(radius_cm, 0.02);
 
         %% render with FIXED camera
-        mask_xz = render_mask_fixed(x, z, radius_cm, scale, x_offset, z_offset, imgH, imgW);
-        mask_yz = render_mask_fixed(y, z, radius_cm, scale, x_offset, z_offset, imgH, imgW);
-
+        mask_xz = render_mask_fixed(x, z, radius_cm, scale, x_offset, z_offset, imgH, imgW, true);
+        mask_yz = render_mask_fixed(y, z, radius_cm, scale, y_offset, z_offset, imgH, imgW, true);
+        mask_xy = render_mask_fixed(x, y, radius_cm, scale, x_offset, y_offset, imgH, imgW, false);
+        
         %% save
         genDir = fullfile(outputDir, sprintf('gen_%02d', g));
         if ~exist(genDir, 'dir')
             mkdir(genDir);
         end
 
+        cameraTable = table( ...
+            g,...
+            scale,...
+            x_offset,...
+            y_offset,...
+            z_offset,...
+            imgH,...
+            imgW,...
+            'VariableNames', ...
+            {'gen','scale','x_offset','y_offset','z_offset','imgH','imgW'});
+
+        writetable( ...
+            cameraTable, ...
+            fullfile(genDir,'camera_params.csv'));
+
         fname_xz = sprintf('plant_gen%02d_t%02d_xz.png', g, i);
         fname_yz = sprintf('plant_gen%02d_t%02d_yz.png', g, i);
+        fname_xy = sprintf('plant_gen%02d_t%02d_xy.png', g, i);
 
         imwrite(mask_xz, fullfile(genDir, fname_xz));
         imwrite(mask_yz, fullfile(genDir, fname_yz));
+        imwrite(mask_xy, fullfile(genDir, fname_xy));
 
-        fprintf('Saved %s and %s\n', fname_xz, fname_yz);
+        fprintf('Saved %s, %s, and %s\n', fname_xz, fname_yz, fname_xy);
 
     end
 end
@@ -279,33 +294,53 @@ disp('Done.');
 %% FUNCTION: CAMERA RENDERING
 %% ============================================================
 
-function mask = render_mask_fixed(xp_raw, zp_raw, radius_cm, scale, x_offset, z_offset, imgH, imgW)
+function mask = render_mask_fixed(x1_raw, x2_raw, radius_cm, scale, x1_offset,x2_offset, imgH, imgW, flip_second_axis)
 
-    xp = xp_raw * scale + x_offset;
-    zp = imgH - (zp_raw * scale + z_offset);
+    x1 = x1_raw*scale + x1_offset;
 
-    radius_px = radius_cm * scale;
-
-    [X, Z] = meshgrid(1:imgW, 1:imgH);
-    mask = false(imgH, imgW);
-
-    N = length(xp);
-
-    for k = 1:N
-        dx = X - xp(k);
-        dz = Z - zp(k);
-
-        mask = mask | (dx.^2 + dz.^2 <= radius_px(k)^2);
+    if flip_second_axis
+        x2 = imgH - (x2_raw*scale + x2_offset);
+    else
+        x2 = x2_raw*scale + x2_offset;
     end
 
-    % smoothing
-    mask = imgaussfilt(double(mask), 1.2);
-    mask = mask > 0.35;
+    radius_px = radius_cm*scale;
 
-    % speckle noise
-    noise = rand(imgH, imgW) < 0.002;
-    mask = mask | noise;
+    [X1,X2] = meshgrid(1:imgW,1:imgH);
 
-    % clean
-    mask = bwareaopen(mask, 30);
+    mask = false(imgH,imgW);
+
+    N = length(x1);
+
+    for k = 1:(N-1)
+
+        segLength = hypot( ...
+            x1(k+1)-x1(k), ...
+            x2(k+1)-x2(k));
+
+        nInterp = max(2,ceil(segLength));
+
+        sInterp = linspace(0,1,nInterp);
+
+        xs = x1(k) + sInterp*(x1(k+1)-x1(k));
+        zs = x2(k) + sInterp*(x2(k+1)-x2(k));
+
+        rs = radius_px(k) ...
+            + sInterp*(radius_px(k+1)-radius_px(k));
+
+        for j = 1:nInterp
+
+            dx1 = X1 - xs(j);
+            dx2 = X2 - zs(j);
+
+            mask = mask | ...
+                (dx1.^2 + dx2.^2 <= rs(j)^2);
+
+        end
+    end
+
+    mask = imgaussfilt(double(mask),0.6);
+    mask = mask > 0.10;
+    mask = imclose(mask,strel('disk',2));
+    mask = bwareaopen(mask,5);
 end

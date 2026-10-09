@@ -218,7 +218,7 @@ __marimo__/
 .streamlit/secrets.toml
 
 # Generated synthetic plots
-/data/synthetic/images/
+/data/synthetic/synthetic_curves/
 /data/synthetic/test_curves/
 
 *:Zone.Identifier
